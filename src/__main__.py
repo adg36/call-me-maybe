@@ -24,12 +24,3 @@ if __name__ == "__main__":
 
     model = Small_LLM_Model()
     generate_function_call(model, validated_prompts, validated_functions)
-
-    # testing the vocabulary
-    """
-    vocab_path = model.get_path_to_vocab_file()
-    with open(vocab_path, "r") as f:
-        vocab = f.read()
-    parsed_vocab = json.loads(vocab)
-    curly_brace_left = parsed_vocab["{"]
-    """

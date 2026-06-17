@@ -1,5 +1,6 @@
+import json
 import sys
-from typing import List
+from typing import Dict, List
 from pydantic import TypeAdapter
 from exceptions import LoadingError
 from models import FunctionSchema, PromptSchema
@@ -51,3 +52,18 @@ def load_and_validate_prompts(pr_filepath: str) -> list[PromptSchema]:
         sys.exit(1)
 
     return validated_prompts
+    
+def load_vocabulary(vocab_path: str) -> List[Dict]:
+    try:
+        with open(vocab_path, "r") as f:
+            raw_vocab = f.read()
+    except PermissionError as e:
+        raise LoadingError(
+                "Vocabulary file does not have reading permissions."
+        ) from e
+    except FileNotFoundError as e:
+        raise LoadingError(
+                "Vocabulary file does not exist."
+        ) from e
+    vocab = json.loads(raw_vocab)
+    return vocab
