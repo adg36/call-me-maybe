@@ -52,7 +52,7 @@ def load_and_validate_prompts(pr_filepath: str) -> list[PromptSchema]:
         sys.exit(1)
 
     return validated_prompts
-    
+
 def load_vocabulary(vocab_path: str) -> List[Dict]:
     try:
         with open(vocab_path, "r") as f:
