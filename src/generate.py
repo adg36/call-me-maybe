@@ -21,22 +21,20 @@ class Pipeline:
         if state == State.EXPECT_NAME_KEY:
             return ['  "name"']
         if state == State.EXPECT_COLON:
-            return [": "]
+            return [': "']
         if state == State.EXPECT_FUNCTION_NAME:
             return [f"{function.name}" for function in self.functions]
         if state == State.DONE:
-            return ["\n}"]
+            return ['"\n}']
 
-    def sample_one_token(self, tokens, state) -> List[str]:
+    def sample_one_token(self, allowed_token_ids, tokens, state) -> List[str]:
         output = []
-        allowed_token_ids = []
-
         logits = self.model.get_logits_from_input_ids(tokens)
         masked_logits = np.full(len(logits), -np.inf)
-        allowed_strings = self.allowed_strings(state)
-        for s in allowed_strings:
-            ids = self.model.encode(s)[0].tolist()
-            allowed_token_ids.extend(ids)
+        # allowed_strings = self.allowed_strings(state)
+        # for s in allowed_strings:
+        #    ids = self.model.encode(s)[0].tolist()
+        #    allowed_token_ids.extend(ids)
         for token in allowed_token_ids:
             masked_logits[token] = logits[token]
         # apply mask to logits, e.g. logits[~allowed] = -np.inf
@@ -46,24 +44,16 @@ class Pipeline:
         text = self.model.decode(output)
         return text
 
-    def sample_tokens(self, tokens, state, max_tokens=30) -> List[str]:
+    def sample_tokens(self, allowed_token_ids, tokens, state, max_tokens) -> List[str]:
         output = []
-        allowed_token_ids = []
-        eos_token_id = 151645
 
         for _ in range(max_tokens):
             logits = self.model.get_logits_from_input_ids(tokens)
             masked_logits = np.full(len(logits), -np.inf)
-            allowed_strings = self.allowed_strings(state)
-            for s in allowed_strings:
-                ids = self.model.encode(s)[0].tolist()
-                allowed_token_ids.extend(ids)
             for token in allowed_token_ids:
                 masked_logits[token] = logits[token]
             # apply mask to logits, e.g. logits[~allowed] = -np.inf
             next_token = np.argmax(masked_logits)
-            if next_token == eos_token_id:
-                break
             tokens.append(int(next_token))
             output.append(next_token)
         text = self.model.decode(output)
@@ -101,20 +91,25 @@ class Pipeline:
             tokens = self.model.encode(my_prompt)[0].tolist()
 
             while True:
-                text = self.sample_one_token(tokens, state)
+                allowed_token_ids = []
+                print(f"State: {state.name}")
+                allowed_strings = self.allowed_strings(state)
+                print(f"Allowed strings: {allowed_strings}")
+                for s in allowed_strings:
+                    ids = self.model.encode(s)[0].tolist()
+                    allowed_token_ids.extend(ids)
+                print(f"Allowed token ids: {allowed_token_ids}")
+                max_tokens = len(allowed_token_ids)
+                text = self.sample_tokens(allowed_token_ids, tokens, state, max_tokens)
                 print(text)
                 if state == State.START:
                     state = State.EXPECT_NAME_KEY
-                    print(f"State is now {state.name}")
                 elif state == State.EXPECT_NAME_KEY:
                     state = State.EXPECT_COLON
-                    print(f"State is now {state.name}")
                 elif state == State.EXPECT_COLON:
                     state = State.EXPECT_FUNCTION_NAME
-                    print(f"State is now {state.name}")
                 elif state == State.EXPECT_FUNCTION_NAME:
                     state = State.DONE
-                    print(f"State is now {state.name}")
                 elif state == State.DONE:
                     break
         print("End of loop")
