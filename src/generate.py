@@ -34,7 +34,10 @@ class Pipeline:
             param_keys = list(params.keys())
             return [f"\"{param_keys[self.current_parameter]}\": "]
         if state == State.EXPECT_NUMBER:
-            return ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "-", "."]
+            return [
+                    "0", "1", "2", "3", "4", "5",
+                    "6", "7", "8", "9", "-", ".", ","
+            ]
         if state == State.DONE:
             return ['}}']
 
