@@ -1,4 +1,5 @@
-from typing import List
+from typing import Any, List
+import re
 import numpy as np
 from llm_sdk import Small_LLM_Model
 from models import FunctionSchema, PromptSchema
@@ -34,10 +35,10 @@ class Pipeline:
             num_params = len(param_keys)
             res = ""
             for i in range(num_params):
-                res += f"\"{param_keys[i]}\":"
+                res += f"\"{param_keys[i]}\": "
+                res += f"{params[param_keys[i]].type}"
                 if i != num_params - 1:
                     res += ", "
-            # res = ",".join(param_keys)
             return [f"{{{res}}}"]
         if state == State.DONE:
             return ['}']
@@ -77,6 +78,9 @@ class Pipeline:
                 return function.parameters
         return None
 
+    def get_parameter(self, allowed_strings, current_string) -> Any:
+        pass
+
     def generate_function_call(self) -> None:
 
         for prompt in self.prompts:
@@ -109,22 +113,23 @@ class Pipeline:
             function_name = None
 
             while True:
-                # print(f"State: {state.name}")
                 allowed_strings = self.allowed_strings(
                         state, prompt, function_name)
-                # print(f"Allowed strings: {allowed_strings}")
                 candidates = [
                         s for s in allowed_strings
                         if s.startswith(current_string)
                 ]
                 allowed_token_ids = self.allowed_tokens(
                         allowed_strings, remaining)
-                # print(f"Allowed token ids: {allowed_token_ids}")
                 text = self.sample_one_token(allowed_token_ids, tokens)
                 # print("Text: ", text)
                 current_string += text
                 # print("Current string: ", current_string)
                 answer.append(text)
+                # CHECK IF WE REACHED A PARAMETER VALUE:
+                if re.search(r"\"\w\": ", current_string):
+                    print("Got regex match!")
+                    # self.get_parameter(allowed_strings, current_string)
                 if len(candidates) == 1 and current_string == candidates[0]:
                     if state == State.START:
                         state = State.EXPECT_PROMPT_KEY
@@ -158,6 +163,8 @@ class Pipeline:
                         remaining = None
                         text = ""
                     elif state == State.EXPECT_PARAMETERS:
+                        print(f"State: {state.name}")
+                        print(f"Allowed strings: {allowed_strings}")
                         state = State.DONE
                         current_string = ""
                         remaining = None
