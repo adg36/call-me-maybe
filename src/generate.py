@@ -76,25 +76,17 @@ class Pipeline:
                 return function.parameters
         return None
 
-    def allowed_param_chars(self, text) -> str:
-        if text == " number":
-            return "-0123456789."
-        if text == " integer":
-            return "0123456789"
-        if text == " string":
-            return ""
-
     def generate_function_call(self) -> None:
+
+        output = []
 
         for prompt in self.prompts:
             # 1. PROMPT
             my_prompt = f"""
-            You are a function calling system.
-            Choose exactly ONE function from the list
-            below and return ONLY a valid JSON object.
-            Do not write anything else.
+            Choose only ONE function from the list
+            and return ONLY a valid JSON object.
 
-            Available functions:
+            Functions:
             {self.functions}
 
             Output format:
@@ -126,7 +118,6 @@ class Pipeline:
                         allowed_strings, remaining)
                 text = self.sample_one_token(allowed_token_ids, tokens)
                 current_string += text
-                print("Current string: ", current_string)
                 answer.append(text)
                 if state == State.EXPECT_NUMBER:
                     if current_string[-1] == ",":
@@ -146,7 +137,8 @@ class Pipeline:
                 else:
                     remaining = self.check_remaining(
                             allowed_strings, current_string)
-            print("".join(answer))
+            output.append(answer)
+        print(output)
 
     def check_remaining(self, allowed_strings, current_string) -> List[str]:
         return [
