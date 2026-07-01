@@ -1,6 +1,6 @@
 from typing import List
 import numpy as np
-from llm_sdk.llm_sdk import Small_LLM_Model
+from llm_sdk import Small_LLM_Model
 from models import FunctionSchema, PromptSchema
 from state_machine import State
 
@@ -73,7 +73,7 @@ class Pipeline:
 
     def get_parameters(self, function_name) -> tuple[str]:
         for function in self.functions:
-            if function.name == function_name[1:-1]:
+            if function.name == function_name:
                 return function.parameters
         return None
 
@@ -147,7 +147,7 @@ class Pipeline:
                         remaining = None
                         text = ""
                     elif state == State.EXPECT_FUNCTION_NAME:
-                        function_name = current_string
+                        function_name = current_string[1:-1]
                         state = State.EXPECT_PARAMETERS_KEY
                         current_string = ""
                         remaining = None

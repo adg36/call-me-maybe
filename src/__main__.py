@@ -1,7 +1,7 @@
 import argparse
 from generate import Pipeline
 from loader import load_and_validate_functions, load_and_validate_prompts
-from llm_sdk.llm_sdk import Small_LLM_Model
+from llm_sdk import Small_LLM_Model
 
 
 if __name__ == "__main__":
@@ -21,6 +21,6 @@ if __name__ == "__main__":
     validated_functions = load_and_validate_functions(fn_filepath)
     validated_prompts = load_and_validate_prompts(pr_filepath)
 
-    model = Small_LLM_Model()
+    model = Small_LLM_Model(device="cpu")
     pipeline = Pipeline(model, validated_prompts, validated_functions)
     pipeline.generate_function_call()
