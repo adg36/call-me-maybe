@@ -15,21 +15,30 @@ class Pipeline:
         self.prompts = prompts
         self.functions = functions
 
-    def allowed_strings(self, state, prompt) -> List[str]:
+    def allowed_strings(self, state, prompt, function_name) -> List[str]:
         if state == State.START:
             return ["{"]
         if state == State.EXPECT_PROMPT_KEY:
-            return ["\"prompt\":"]
+            return ["\"prompt\": "]
         if state == State.EXPECT_PROMPT:
             return [f"\"{prompt.prompt}\""]
         if state == State.EXPECT_NAME_KEY:
-            return [",\"name\":"]
+            return [",\"name\": "]
         if state == State.EXPECT_FUNCTION_NAME:
             return [f"\"{function.name}\"" for function in self.functions]
         if state == State.EXPECT_PARAMETERS_KEY:
-            return [",\"parameters\":"]
+            return [",\"parameters\": "]
         if state == State.EXPECT_PARAMETERS:
-            return ["{}"]
+            params = self.get_parameters(function_name)
+            param_keys = list(params.keys())
+            num_params = len(param_keys)
+            res = ""
+            for i in range(num_params):
+                res += f"\"{param_keys[i]}\":"
+                if i != num_params - 1:
+                    res += ", "
+            # res = ",".join(param_keys)
+            return [f"{{{res}}}"]
         if state == State.DONE:
             return ['}']
 
@@ -62,6 +71,12 @@ class Pipeline:
         text = self.model.decode(next_token)
         return text
 
+    def get_parameters(self, function_name) -> tuple[str]:
+        for function in self.functions:
+            if function.name == function_name[1:-1]:
+                return function.parameters
+        return None
+
     def generate_function_call(self) -> None:
 
         for prompt in self.prompts:
@@ -91,10 +106,12 @@ class Pipeline:
             answer = []
             remaining = None
             current_string = ""
+            function_name = None
 
             while True:
                 # print(f"State: {state.name}")
-                allowed_strings = self.allowed_strings(state, prompt)
+                allowed_strings = self.allowed_strings(
+                        state, prompt, function_name)
                 # print(f"Allowed strings: {allowed_strings}")
                 candidates = [
                         s for s in allowed_strings
@@ -130,6 +147,7 @@ class Pipeline:
                         remaining = None
                         text = ""
                     elif state == State.EXPECT_FUNCTION_NAME:
+                        function_name = current_string
                         state = State.EXPECT_PARAMETERS_KEY
                         current_string = ""
                         remaining = None
