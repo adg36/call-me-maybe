@@ -1,7 +1,7 @@
-from typing import Any, List
+from typing import Any, Dict, List
 import numpy as np
 from llm_sdk import Small_LLM_Model
-from models import FunctionSchema, PromptSchema
+from models import FunctionSchema, PromptSchema, Parameter
 from state_machine import State, NEXT_STATE
 
 
@@ -16,30 +16,38 @@ class Pipeline:
         self.functions = functions
         self.current_parameter = 0
 
-    def allowed_strings(self, state, prompt, function_name) -> List[str]:
+    def allowed_strings(self,
+                        state: State,
+                        function_name: str | None
+                        ) -> List[str | Any]:
         if state == State.START:
             return ["{"]
-        if state == State.EXPECT_PROMPT_KEY:
-            return ["\"prompt\": "]
-        if state == State.EXPECT_PROMPT:
-            return [f"\"{prompt.prompt}\""]
         if state == State.EXPECT_NAME_KEY:
-            return [",\"name\": "]
+            return ["\"name\": "]
         if state == State.EXPECT_FUNCTION_NAME:
             return [f"\"{function.name}\"" for function in self.functions]
         if state == State.EXPECT_PARAMETERS_KEY:
             return [",\"parameters\": {"]
         if state == State.EXPECT_PARAM_KEY:
-            params = self.get_parameters(function_name)
-            param_keys = list(params.keys())
+            if function_name is not None:
+                params = self.get_parameters(function_name)
+                if params is not None:
+                    param_keys = list(params.keys())
             return [f"\"{param_keys[self.current_parameter]}\": "]
-        if state == State.EXPECT_NUMBER:
+        if state == State.EXPECT_NUMBER_START:
             return [
-                    "0", "1", "2", "3", "4", "5",
-                    "6", "7", "8", "9", "-", ".", ","
+                "0", "1", "2", "3", "4", "5",
+                "6", "7", "8", "9", "-"
+            ]
+        if state == State.EXPECT_NUMBER_CONT:
+            return [
+                "0", "1", "2", "3", "4", "5", "6",
+                "7", "8", "9", "-", ".", ",", "}"
+
             ]
         if state == State.DONE:
             return ['}}']
+        return []
 
     def allowed_tokens(self, allowed_strings, remaining) -> List[int]:
         allowed_token_ids = []
@@ -49,13 +57,15 @@ class Pipeline:
             for s in allowed_strings:
                 ids = self.model.encode(s)[0].tolist()
                 for token_id in ids:
-                    if s.startswith(self.model.decode(token_id)):
+                    if (s.startswith(self.model.decode(token_id))
+                            and token_id not in allowed_token_ids):
                         allowed_token_ids.append(token_id)
         else:
             for suffix in remaining:
                 ids = self.model.encode(suffix)[0].tolist()
                 for token_id in ids:
-                    if suffix.startswith(self.model.decode(token_id)):
+                    if (suffix.startswith(self.model.decode(token_id))
+                            and token_id not in allowed_token_ids):
                         allowed_token_ids.append(token_id)
 
         return allowed_token_ids
@@ -70,14 +80,13 @@ class Pipeline:
         text = self.model.decode(next_token)
         return text
 
-    def get_parameters(self, function_name) -> tuple[str]:
+    def get_parameters(self, function_name) -> Dict[str, Parameter] | None:
         for function in self.functions:
             if function.name == function_name:
                 return function.parameters
         return None
 
     def generate_function_call(self) -> None:
-
         output = []
 
         for prompt in self.prompts:
@@ -105,21 +114,32 @@ class Pipeline:
             answer = []
             remaining = None
             current_string = ""
-            function_name = None
+            function_name: None | str = None
 
             while True:
                 allowed_strings = self.allowed_strings(
-                        state, prompt, function_name)
+                    state, function_name)
+                print("Allowed strings: ", allowed_strings)
                 candidates = [
-                        s for s in allowed_strings
-                        if s.startswith(current_string)
+                    s for s in allowed_strings
+                    if s.startswith(current_string)
                 ]
+                print("Candidates: ", candidates)
                 allowed_token_ids = self.allowed_tokens(
-                        allowed_strings, remaining)
-                text = self.sample_one_token(allowed_token_ids, tokens)
+                    allowed_strings, remaining)
+                print("Allowed tokens: ", allowed_token_ids)
+                if len(allowed_token_ids) == 1:
+                    tokens.append(int(allowed_token_ids[0]))
+                    text = self.model.decode(allowed_token_ids)
+                else:
+                    text = self.sample_one_token(allowed_token_ids, tokens)
+                print("Text: ", text)
                 current_string += text
+                print("Current string: ", current_string)
                 answer.append(text)
-                if state == State.EXPECT_NUMBER:
+                if state == State.EXPECT_NUMBER_START:
+                    state = State.EXPECT_NUMBER_CONT
+                elif state == State.EXPECT_NUMBER_CONT:
                     if current_string[-1] == ",":
                         state = NEXT_STATE[state]
                         current_string = ""
@@ -136,13 +156,14 @@ class Pipeline:
                     text = ""
                 else:
                     remaining = self.check_remaining(
-                            allowed_strings, current_string)
+                        allowed_strings, current_string)
+            print("".join(answer))
             output.append(answer)
         print(output)
 
     def check_remaining(self, allowed_strings, current_string) -> List[str]:
         return [
-                s[len(current_string):]
-                for s in allowed_strings
-                if s.startswith(current_string)
+            s[len(current_string):]
+            for s in allowed_strings
+            if s.startswith(current_string)
         ]
