@@ -33,7 +33,7 @@ class Pipeline:
                 params = self.get_parameters(function_name)
                 if params is not None:
                     param_keys = list(params.keys())
-            return [f"\"{param_keys[self.current_parameter]}\": "]
+            return [f"\"{param_keys[self.current_parameter]}\":"]
         if state == State.EXPECT_NUMBER_START:
             return [
                 "0", "1", "2", "3", "4", "5",
@@ -49,6 +49,8 @@ class Pipeline:
             return []
         if state == State.DONE:
             return ['}']
+        if state == State.FINISHED:
+            return
         return []
 
     def allowed_tokens(self, allowed_strings, remaining) -> List[int]:
@@ -74,10 +76,13 @@ class Pipeline:
 
     def sample_one_token(self, allowed_token_ids, tokens) -> str:
         logits = self.model.get_logits_from_input_ids(tokens)
-        masked_logits = np.full(len(logits), -np.inf)
-        for token_id in allowed_token_ids:
-            masked_logits[token_id] = logits[token_id]
-        next_token = np.argmax(masked_logits)
+        if allowed_token_ids:
+            masked_logits = np.full(len(logits), -np.inf)
+            for token_id in allowed_token_ids:
+                masked_logits[token_id] = logits[token_id]
+            next_token = np.argmax(masked_logits)
+        else:
+            next_token = np.argmax(logits)
         tokens.append(int(next_token))
         text = self.model.decode(next_token)
         return text
@@ -122,30 +127,19 @@ class Pipeline:
             while True:
                 allowed_strings = self.allowed_strings(
                     state, function_name)
-                print("Allowed strings: ", allowed_strings)
                 candidates = [
                     s for s in allowed_strings
                     if s.startswith(current_string)
                 ]
-                print("Candidates: ", candidates)
                 allowed_token_ids = self.allowed_tokens(
                     allowed_strings, remaining)
-                print("Allowed tokens: ", allowed_token_ids)
                 if len(allowed_token_ids) == 1:
                     tokens.append(int(allowed_token_ids[0]))
                     text = self.model.decode(allowed_token_ids)
                 else:
                     text = self.sample_one_token(allowed_token_ids, tokens)
-                print("Text: ", text)
                 current_string += text
-                print("Current string: ", current_string)
                 answer.append(text)
-                # if state == State.EXPECT_PARAM_KEY:
-                    # CHECK FUNCTION NAME AND PARAMETER TYPE
-                    # IF PARAMETER TYPE IS NUMBER:
-                    # MOVE TO STATE EXPECT NUMBER START
-                    # IF PARAMETER TYPE IS STRING:
-                    # MOVE TO STATE EXPECT STRING
                 if state == State.EXPECT_NUMBER_START:
                     state = State.EXPECT_NUMBER_CONT
                 elif state == State.EXPECT_NUMBER_CONT:
@@ -160,12 +154,28 @@ class Pipeline:
                         current_string = ""
                         remaining = None
                         text = ""
+                elif state == State.EXPECT_STRING:
+                    if current_string.endswith("\n"):
+                        state = State.FINISHED
+                        break
                 elif len(candidates) == 1 and current_string == candidates[0]:
                     if state == State.EXPECT_FUNCTION_NAME:
                         function_name = current_string[1:-1]
+                    elif state == State.EXPECT_PARAM_KEY:
+                        if function_name is not None:
+                            params = self.get_parameters(function_name)
+                            if params:
+                                for _, param in params.items():
+                                    if param.type == "number":
+                                        state = State.EXPECT_NUMBER_START
+                                    elif param.type == "string":
+                                        state = State.EXPECT_STRING
                     elif state == State.DONE:
                         break
-                    state = NEXT_STATE[state]
+                    if state not in (
+                            State.EXPECT_NUMBER_START, State.EXPECT_STRING
+                    ):
+                        state = NEXT_STATE[state]
                     current_string = ""
                     remaining = None
                     text = ""
@@ -173,7 +183,7 @@ class Pipeline:
                     remaining = self.check_remaining(
                         allowed_strings, current_string)
             print("".join(answer))
-            output.append(answer)
+            output.append("".join(answer))
         print(output)
 
     def check_remaining(self, allowed_strings, current_string) -> List[str]:
