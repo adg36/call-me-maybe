@@ -42,11 +42,13 @@ class Pipeline:
         if state == State.EXPECT_NUMBER_CONT:
             return [
                 "0", "1", "2", "3", "4", "5", "6",
-                "7", "8", "9", "-", ".", ",", "}"
+                "7", "8", "9", ".", ",", "}"
 
             ]
+        if state == State.EXPECT_STRING:
+            return []
         if state == State.DONE:
-            return ['}}']
+            return ['}']
         return []
 
     def allowed_tokens(self, allowed_strings, remaining) -> List[int]:
@@ -115,6 +117,7 @@ class Pipeline:
             remaining = None
             current_string = ""
             function_name: None | str = None
+            self.current_parameter = 0
 
             while True:
                 allowed_strings = self.allowed_strings(
@@ -137,10 +140,22 @@ class Pipeline:
                 current_string += text
                 print("Current string: ", current_string)
                 answer.append(text)
+                # if state == State.EXPECT_PARAM_KEY:
+                    # CHECK FUNCTION NAME AND PARAMETER TYPE
+                    # IF PARAMETER TYPE IS NUMBER:
+                    # MOVE TO STATE EXPECT NUMBER START
+                    # IF PARAMETER TYPE IS STRING:
+                    # MOVE TO STATE EXPECT STRING
                 if state == State.EXPECT_NUMBER_START:
                     state = State.EXPECT_NUMBER_CONT
                 elif state == State.EXPECT_NUMBER_CONT:
                     if current_string[-1] == ",":
+                        self.current_parameter += 1
+                        state = State.EXPECT_PARAM_KEY
+                        current_string = ""
+                        remaining = None
+                        text = ""
+                    elif current_string[-1] == "}":
                         state = NEXT_STATE[state]
                         current_string = ""
                         remaining = None
