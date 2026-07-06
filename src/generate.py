@@ -1,7 +1,8 @@
 from typing import Any, Dict, List
 import json
+import os
 import numpy as np
-from llm_sdk import Small_LLM_Model
+from llm_sdk import Small_LLM_Model  # type: ignore[attr-defined]
 from models import FunctionSchema, PromptSchema, Parameter
 from state_machine import State, NEXT_STATE
 
@@ -61,10 +62,13 @@ class Pipeline:
         if state == State.DONE:
             return ['}']
         if state == State.FINISHED:
-            return
+            return []
         return []
 
-    def allowed_tokens(self, allowed_strings, remaining) -> List[int]:
+    def allowed_tokens(self,
+                       allowed_strings: List[str | Any],
+                       remaining: List[str]
+                       ) -> List[int]:
         allowed_token_ids = []
 
         if not remaining:
@@ -75,6 +79,7 @@ class Pipeline:
                     if (s.startswith(self.model.decode(token_id))
                             and token_id not in allowed_token_ids):
                         allowed_token_ids.append(token_id)
+            return allowed_token_ids
         else:
             for suffix in remaining:
                 ids = self.model.encode(suffix)[0].tolist()
@@ -82,10 +87,12 @@ class Pipeline:
                     if (suffix.startswith(self.model.decode(token_id))
                             and token_id not in allowed_token_ids):
                         allowed_token_ids.append(token_id)
+            return allowed_token_ids
 
-        return allowed_token_ids
-
-    def sample_one_token(self, allowed_token_ids, tokens) -> str:
+    def sample_one_token(self,
+                         allowed_token_ids: List[int],
+                         tokens: List[int]
+                         ) -> Any:
         logits = self.model.get_logits_from_input_ids(tokens)
         if allowed_token_ids:
             masked_logits = np.full(len(logits), -np.inf)
@@ -98,11 +105,13 @@ class Pipeline:
         text = self.model.decode(next_token)
         return text
 
-    def get_parameters(self, function_name) -> Dict[str, Parameter] | None:
+    def get_parameters(self,
+                       function_name: str
+                       ) -> Dict[str, Parameter]:
         for function in self.functions:
             if function.name == function_name:
                 return function.parameters
-        return None
+        return {}
 
     def generate_function_call(self) -> None:
         output = []
@@ -131,7 +140,7 @@ class Pipeline:
             tokens = self.model.encode(my_prompt)[0].tolist()
             state = State.START
             answer = []
-            remaining = None
+            remaining: List[str] = []
             current_string = ""
             function_name: None | str = None
             self.current_parameter = 0
@@ -160,19 +169,20 @@ class Pipeline:
                         self.current_parameter += 1
                         state = State.EXPECT_PARAM_KEY
                         current_string = ""
-                        remaining = None
+                        remaining = []
                         text = ""
                     elif current_string.endswith("}"):
                         state = NEXT_STATE[state]
                         current_string = ""
-                        remaining = None
+                        remaining = []
                         text = ""
                 elif state == State.EXPECT_STRING:
-                    if current_string.endswith("',") or current_string.endswith('",'):
+                    if (current_string.endswith("',")
+                            or current_string.endswith('",')):
                         self.current_parameter += 1
                         state = State.EXPECT_PARAM_KEY
                         current_string = ""
-                        remaining = None
+                        remaining = []
                         text = ""
                     if current_string.endswith("\n"):
                         state = State.FINISHED
@@ -184,15 +194,16 @@ class Pipeline:
                         if function_name is not None:
                             params = self.get_parameters(function_name)
                             self.nb_of_parameters = len(params)
-                            current_param = list(
-                                    params.values()
-                                    )[self.current_parameter].type
-                            if current_param == "number":
-                                state = State.EXPECT_NUMBER_START
-                            elif current_param == "integer":
-                                state = State.EXPECT_NUMBER_CONT
-                            elif current_param == "string":
-                                state = State.EXPECT_STRING
+                            if params:
+                                current_param = list(
+                                        params.values()
+                                        )[self.current_parameter].type
+                                if current_param == "number":
+                                    state = State.EXPECT_NUMBER_START
+                                elif current_param == "integer":
+                                    state = State.EXPECT_NUMBER_CONT
+                                elif current_param == "string":
+                                    state = State.EXPECT_STRING
                     elif state == State.DONE:
                         break
                     if state not in (
@@ -202,7 +213,7 @@ class Pipeline:
                     ):
                         state = NEXT_STATE[state]
                     current_string = ""
-                    remaining = None
+                    remaining = []
                     text = ""
                 else:
                     remaining = self.check_remaining(
@@ -216,14 +227,19 @@ class Pipeline:
             output.append(result)
         self.write_output(output)
 
-    def check_remaining(self, allowed_strings, current_string) -> List[str]:
+    def check_remaining(self,
+                        allowed_strings: List[str | Any],
+                        current_string: str
+                        ) -> List[str]:
         return [
             s[len(current_string):]
             for s in allowed_strings
             if s.startswith(current_string)
         ]
 
-    def write_output(self, output) -> None:
+    def write_output(self, output: List[Any]) -> None:
+
+        os.makedirs(os.path.dirname(self.output_filepath), exist_ok=True)
 
         with open(self.output_filepath, "w") as f:
             json.dump(output, f, indent=2)

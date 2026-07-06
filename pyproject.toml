@@ -21,3 +21,9 @@ members = [
 
 [tool.uv.sources]
 llm-sdk = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "flake8>=7.3.0",
+    "mypy>=2.1.0",
+]

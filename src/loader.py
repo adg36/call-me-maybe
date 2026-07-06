@@ -1,9 +1,10 @@
 import json
 import sys
-from typing import Dict, List
+from typing import Any, List
 from pydantic import TypeAdapter
 from exceptions import LoadingError
 from models import FunctionSchema, PromptSchema
+
 
 def load_and_validate_functions(fn_filepath: str) -> List[FunctionSchema]:
 
@@ -29,6 +30,7 @@ def load_and_validate_functions(fn_filepath: str) -> List[FunctionSchema]:
 
     return validated_functions
 
+
 def load_and_validate_prompts(pr_filepath: str) -> list[PromptSchema]:
 
     pr_adapter = TypeAdapter(List[PromptSchema])
@@ -53,7 +55,8 @@ def load_and_validate_prompts(pr_filepath: str) -> list[PromptSchema]:
 
     return validated_prompts
 
-def load_vocabulary(vocab_path: str) -> List[Dict]:
+
+def load_vocabulary(vocab_path: str) -> Any:
     try:
         with open(vocab_path, "r") as f:
             raw_vocab = f.read()

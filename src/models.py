@@ -1,8 +1,10 @@
-from typing import Dict, List
+from typing import Dict
 from pydantic import BaseModel
+
 
 class Parameter(BaseModel):
     type: str
+
 
 class FunctionSchema(BaseModel):
     name: str
@@ -10,8 +12,10 @@ class FunctionSchema(BaseModel):
     parameters: Dict[str, Parameter]
     returns: Dict[str, str]
 
+
 class PromptSchema(BaseModel):
     prompt: str
+
 
 class FunctionCall(BaseModel):
     prompt: str

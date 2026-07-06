@@ -1,7 +1,7 @@
 import argparse
 from generate import Pipeline
 from loader import load_and_validate_functions, load_and_validate_prompts
-from llm_sdk import Small_LLM_Model
+from llm_sdk import Small_LLM_Model  # type: ignore[attr-defined]
 
 
 if __name__ == "__main__":
