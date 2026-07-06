@@ -1,4 +1,5 @@
 from typing import Any, Dict, List
+import json
 import numpy as np
 from llm_sdk import Small_LLM_Model
 from models import FunctionSchema, PromptSchema, Parameter
@@ -9,11 +10,14 @@ class Pipeline:
     def __init__(self,
                  model: Small_LLM_Model,
                  prompts: List[PromptSchema],
-                 functions: List[FunctionSchema]
+                 functions: List[FunctionSchema],
+                 output_filepath: str
                  ) -> None:
         self.model = model
         self.prompts = prompts
         self.functions = functions
+        self.output_filepath = output_filepath
+        self.nb_of_parameters = 0
         self.current_parameter = 0
 
     def allowed_strings(self,
@@ -31,20 +35,27 @@ class Pipeline:
         if state == State.EXPECT_PARAM_KEY:
             if function_name is not None:
                 params = self.get_parameters(function_name)
+                self.nb_of_parameters = len(params)
                 if params is not None:
                     param_keys = list(params.keys())
-            return [f"\"{param_keys[self.current_parameter]}\":"]
+                    return [f"\"{param_keys[self.current_parameter]}\":"]
+            return []
         if state == State.EXPECT_NUMBER_START:
             return [
                 "0", "1", "2", "3", "4", "5",
-                "6", "7", "8", "9", "-"
+                "6", "7", "8", "9", "-", "."
             ]
         if state == State.EXPECT_NUMBER_CONT:
-            return [
-                "0", "1", "2", "3", "4", "5", "6",
-                "7", "8", "9", ".", ",", "}"
-
-            ]
+            if self.current_parameter < (self.nb_of_parameters - 1):
+                return [
+                    "0", "1", "2", "3", "4", "5", "6",
+                    "7", "8", "9", ","
+                ]
+            if self.current_parameter == (self.nb_of_parameters - 1):
+                return [
+                    "0", "1", "2", "3", "4", "5", "6",
+                    "7", "8", "9", "}"
+                ]
         if state == State.EXPECT_STRING:
             return []
         if state == State.DONE:
@@ -97,9 +108,10 @@ class Pipeline:
         output = []
 
         for prompt in self.prompts:
+
             # 1. PROMPT
             my_prompt = f"""
-            Choose only ONE function from the list
+            Choose the most appropriate function from the list
             and return ONLY a valid JSON object.
 
             Functions:
@@ -141,20 +153,27 @@ class Pipeline:
                 current_string += text
                 answer.append(text)
                 if state == State.EXPECT_NUMBER_START:
-                    state = State.EXPECT_NUMBER_CONT
+                    if current_string.endswith("."):
+                        state = State.EXPECT_NUMBER_CONT
                 elif state == State.EXPECT_NUMBER_CONT:
-                    if current_string[-1] == ",":
+                    if current_string.endswith(","):
                         self.current_parameter += 1
                         state = State.EXPECT_PARAM_KEY
                         current_string = ""
                         remaining = None
                         text = ""
-                    elif current_string[-1] == "}":
+                    elif current_string.endswith("}"):
                         state = NEXT_STATE[state]
                         current_string = ""
                         remaining = None
                         text = ""
                 elif state == State.EXPECT_STRING:
+                    if current_string.endswith("',") or current_string.endswith('",'):
+                        self.current_parameter += 1
+                        state = State.EXPECT_PARAM_KEY
+                        current_string = ""
+                        remaining = None
+                        text = ""
                     if current_string.endswith("\n"):
                         state = State.FINISHED
                         break
@@ -164,16 +183,22 @@ class Pipeline:
                     elif state == State.EXPECT_PARAM_KEY:
                         if function_name is not None:
                             params = self.get_parameters(function_name)
-                            if params:
-                                for _, param in params.items():
-                                    if param.type == "number":
-                                        state = State.EXPECT_NUMBER_START
-                                    elif param.type == "string":
-                                        state = State.EXPECT_STRING
+                            self.nb_of_parameters = len(params)
+                            current_param = list(
+                                    params.values()
+                                    )[self.current_parameter].type
+                            if current_param == "number":
+                                state = State.EXPECT_NUMBER_START
+                            elif current_param == "integer":
+                                state = State.EXPECT_NUMBER_CONT
+                            elif current_param == "string":
+                                state = State.EXPECT_STRING
                     elif state == State.DONE:
                         break
                     if state not in (
-                            State.EXPECT_NUMBER_START, State.EXPECT_STRING
+                            State.EXPECT_NUMBER_START,
+                            State.EXPECT_NUMBER_CONT,
+                            State.EXPECT_STRING
                     ):
                         state = NEXT_STATE[state]
                     current_string = ""
@@ -182,9 +207,14 @@ class Pipeline:
                 else:
                     remaining = self.check_remaining(
                         allowed_strings, current_string)
-            print("".join(answer))
-            output.append("".join(answer))
-        print(output)
+            obj = json.loads("".join(answer))
+            result = {
+                    "prompt": prompt.prompt,
+                    "name": obj["name"],
+                    "parameters": obj["parameters"]
+            }
+            output.append(result)
+        self.write_output(output)
 
     def check_remaining(self, allowed_strings, current_string) -> List[str]:
         return [
@@ -192,3 +222,8 @@ class Pipeline:
             for s in allowed_strings
             if s.startswith(current_string)
         ]
+
+    def write_output(self, output) -> None:
+
+        with open(self.output_filepath, "w") as f:
+            json.dump(output, f, indent=2)
