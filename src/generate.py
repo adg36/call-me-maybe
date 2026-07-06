@@ -24,7 +24,7 @@ class Pipeline:
     def allowed_strings(self,
                         state: State,
                         function_name: str | None,
-                        current_string: str
+                        prompt: str
                         ) -> List[str | Any]:
         if state == State.START:
             return ["{"]
@@ -59,8 +59,9 @@ class Pipeline:
                     "7", "8", "9", "}"
                 ]
         if state == State.EXPECT_STRING:
-            if current_string == "":
-                return ['"']
+            prompt_string = self.get_string_from_prompt(prompt)
+            if prompt_string:
+                return [prompt_string]
             return []
         if state == State.DONE:
             return ['}']
@@ -83,13 +84,13 @@ class Pipeline:
                             and token_id not in allowed_token_ids):
                         allowed_token_ids.append(token_id)
             return allowed_token_ids
-        else:
-            for suffix in remaining:
-                ids = self.model.encode(suffix)[0].tolist()
-                for token_id in ids:
-                    if (suffix.startswith(self.model.decode(token_id))
-                            and token_id not in allowed_token_ids):
-                        allowed_token_ids.append(token_id)
+
+        for suffix in remaining:
+            ids = self.model.encode(suffix)[0].tolist()
+            for token_id in ids:
+                if (suffix.startswith(self.model.decode(token_id))
+                        and token_id not in allowed_token_ids):
+                    allowed_token_ids.append(token_id)
             return allowed_token_ids
 
     def sample_one_token(self,
@@ -116,10 +117,22 @@ class Pipeline:
                 return function.parameters
         return {}
 
+    def get_string_from_prompt(self, prompt: str) -> str:
+        s = ""
+        print(f"Getting string from prompt '{prompt}'")
+        index = prompt.find('\"')
+        print("Index: ", index)
+        if index >= 0:
+            index += 1
+            while prompt[index] != '\"':
+                s += prompt[index]
+                index += 1
+        return s
+
     def generate_function_call(self) -> None:
         output = []
 
-        for prompt in self.prompts:
+        for prompt in self.prompts[8:]:
 
             # 1. PROMPT
             my_prompt = f"""
@@ -150,7 +163,7 @@ class Pipeline:
 
             while True:
                 allowed_strings = self.allowed_strings(
-                    state, function_name, current_string)
+                    state, function_name, prompt.prompt)
                 candidates = [
                     s for s in allowed_strings
                     if s.startswith(current_string)
