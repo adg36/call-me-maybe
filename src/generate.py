@@ -23,7 +23,8 @@ class Pipeline:
 
     def allowed_strings(self,
                         state: State,
-                        function_name: str | None
+                        function_name: str | None,
+                        current_string: str
                         ) -> List[str | Any]:
         if state == State.START:
             return ["{"]
@@ -58,6 +59,8 @@ class Pipeline:
                     "7", "8", "9", "}"
                 ]
         if state == State.EXPECT_STRING:
+            if current_string == "":
+                return ['"']
             return []
         if state == State.DONE:
             return ['}']
@@ -147,7 +150,7 @@ class Pipeline:
 
             while True:
                 allowed_strings = self.allowed_strings(
-                    state, function_name)
+                    state, function_name, current_string)
                 candidates = [
                     s for s in allowed_strings
                     if s.startswith(current_string)
@@ -156,7 +159,7 @@ class Pipeline:
                     allowed_strings, remaining)
                 if len(allowed_token_ids) == 1:
                     tokens.append(int(allowed_token_ids[0]))
-                    text = self.model.decode(allowed_token_ids)
+                    text = self.model.decode(allowed_token_ids[0])
                 else:
                     text = self.sample_one_token(allowed_token_ids, tokens)
                 current_string += text
