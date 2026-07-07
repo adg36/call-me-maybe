@@ -1,6 +1,7 @@
 from typing import Any, Dict, List
 import json
 import os
+import sys
 import numpy as np
 from llm_sdk import Small_LLM_Model  # type: ignore[attr-defined]
 from models import FunctionSchema, PromptSchema, Parameter
@@ -123,116 +124,125 @@ class Pipeline:
 
             print(f"PROMPT {i+1}/{len(self.prompts)}: {prompt.prompt}")
 
-            # 1. PROMPT
-            my_prompt = f"""
-            Choose the function whose description
-            best matches the user request.
-            Return only a JSON object.
+            try:
+                result = self.generate_one_prompt(prompt)
+                output.append(result)
+            except RuntimeError as e:
+                print(f"Error: {e}")
+                sys.exit(1)
+            print(f"ANSWER: {result}")
+        self.write_output(output)
 
-            Functions:
-            {self.functions}
+    def generate_one_prompt(self, prompt: PromptSchema) -> List[Any]:
 
-            Output format:
-            {{
-              "name": "<function_name>",
-              "parameters": {{ ... }}
-            }}
+        # 1. PROMPT
+        my_prompt = f"""
+        Choose the function whose description
+        best matches the user request.
+        Return only a JSON object.
 
-            User request:
-            {prompt.prompt}
-            """
+        Functions:
+        {self.functions}
 
-            # 2. TOKENIZATION
-            tokens = self.model.encode(my_prompt)[0].tolist()
-            state = State.START
-            answer = []
-            remaining: List[str] = []
-            current_string = ""
-            function_name: None | str = None
-            self.current_parameter = 0
+        Output format:
+        {{
+          "name": "<function_name>",
+          "parameters": {{ ... }}
+        }}
 
-            while True:
-                allowed_strings = self.allowed_strings(
-                    state, function_name, current_string)
-                candidates = [
-                    s for s in allowed_strings
-                    if s.startswith(current_string)
-                ]
-                allowed_token_ids = self.allowed_tokens(
-                    allowed_strings, remaining)
-                if len(allowed_token_ids) == 1:
-                    tokens.append(int(allowed_token_ids[0]))
-                    text = self.model.decode(allowed_token_ids)
-                else:
-                    text = self.sample_one_token(allowed_token_ids, tokens)
-                current_string += text
-                answer.append(text)
-                if state == State.EXPECT_NUMBER_START:
-                    if current_string.endswith("."):
-                        state = State.EXPECT_NUMBER_CONT
-                elif state == State.EXPECT_NUMBER_CONT:
-                    if current_string.endswith(","):
-                        self.current_parameter += 1
-                        state = State.EXPECT_PARAM_KEY
-                        current_string = ""
-                        remaining = []
-                        text = ""
-                    elif current_string.endswith("}"):
-                        state = NEXT_STATE[state]
-                        current_string = ""
-                        remaining = []
-                        text = ""
-                elif state == State.EXPECT_STRING:
-                    if (current_string.endswith("',")
-                            or current_string.endswith('",')):
-                        self.current_parameter += 1
-                        state = State.EXPECT_PARAM_KEY
-                        current_string = ""
-                        remaining = []
-                        text = ""
-                    if current_string.endswith("\n"):
-                        state = State.FINISHED
-                        break
-                elif len(candidates) == 1 and current_string == candidates[0]:
-                    if state == State.EXPECT_FUNCTION_NAME:
-                        function_name = current_string[1:-1]
-                    elif state == State.EXPECT_PARAM_KEY:
-                        if function_name is not None:
-                            params = self.get_parameters(function_name)
-                            self.nb_of_parameters = len(params)
-                            if params:
-                                current_param = list(
-                                        params.values()
-                                        )[self.current_parameter].type
-                                if current_param == "number":
-                                    state = State.EXPECT_NUMBER_START
-                                elif current_param == "integer":
-                                    state = State.EXPECT_NUMBER_CONT
-                                elif current_param == "string":
-                                    state = State.EXPECT_STRING
-                    elif state == State.DONE:
-                        break
-                    if state not in (
-                            State.EXPECT_NUMBER_START,
-                            State.EXPECT_NUMBER_CONT,
-                            State.EXPECT_STRING
-                    ):
-                        state = NEXT_STATE[state]
+        User request:
+        {prompt.prompt}
+        """
+
+        # 2. TOKENIZATION
+        tokens = self.model.encode(my_prompt)[0].tolist()
+        state = State.START
+        answer = []
+        remaining: List[str] = []
+        current_string = ""
+        function_name: None | str = None
+        self.current_parameter = 0
+
+        while True:
+            allowed_strings = self.allowed_strings(
+                state, function_name, current_string)
+            candidates = [
+                s for s in allowed_strings
+                if s.startswith(current_string)
+            ]
+            allowed_token_ids = self.allowed_tokens(
+                allowed_strings, remaining)
+            if len(allowed_token_ids) == 1:
+                tokens.append(int(allowed_token_ids[0]))
+                text = self.model.decode(allowed_token_ids)
+            else:
+                text = self.sample_one_token(allowed_token_ids, tokens)
+            current_string += text
+            answer.append(text)
+            if state == State.EXPECT_NUMBER_START:
+                if current_string.endswith("."):
+                    state = State.EXPECT_NUMBER_CONT
+            elif state == State.EXPECT_NUMBER_CONT:
+                if current_string.endswith(","):
+                    self.current_parameter += 1
+                    state = State.EXPECT_PARAM_KEY
                     current_string = ""
                     remaining = []
                     text = ""
-                else:
-                    remaining = self.check_remaining(
-                        allowed_strings, current_string)
-            obj = json.loads("".join(answer))
-            result = {
-                    "prompt": prompt.prompt,
-                    "name": obj["name"],
-                    "parameters": obj["parameters"]
-            }
-            output.append(result)
-            print(f"ANSWER: {result}")
-        self.write_output(output)
+                elif current_string.endswith("}"):
+                    state = NEXT_STATE[state]
+                    current_string = ""
+                    remaining = []
+                    text = ""
+            elif state == State.EXPECT_STRING:
+                if (current_string.endswith("',")
+                        or current_string.endswith('",')):
+                    self.current_parameter += 1
+                    state = State.EXPECT_PARAM_KEY
+                    current_string = ""
+                    remaining = []
+                    text = ""
+                if current_string.endswith("\n"):
+                    state = State.FINISHED
+                    break
+            elif len(candidates) == 1 and current_string == candidates[0]:
+                if state == State.EXPECT_FUNCTION_NAME:
+                    function_name = current_string[1:-1]
+                elif state == State.EXPECT_PARAM_KEY:
+                    if function_name is not None:
+                        params = self.get_parameters(function_name)
+                        self.nb_of_parameters = len(params)
+                        if params:
+                            current_param = list(
+                                    params.values()
+                                    )[self.current_parameter].type
+                            if current_param == "number":
+                                state = State.EXPECT_NUMBER_START
+                            elif current_param == "integer":
+                                state = State.EXPECT_NUMBER_CONT
+                            elif current_param == "string":
+                                state = State.EXPECT_STRING
+                elif state == State.DONE:
+                    break
+                if state not in (
+                        State.EXPECT_NUMBER_START,
+                        State.EXPECT_NUMBER_CONT,
+                        State.EXPECT_STRING
+                ):
+                    state = NEXT_STATE[state]
+                current_string = ""
+                remaining = []
+                text = ""
+            else:
+                remaining = self.check_remaining(
+                    allowed_strings, current_string)
+        obj = json.loads("".join(answer))
+        result = {
+                "prompt": prompt.prompt,
+                "name": obj["name"],
+                "parameters": obj["parameters"]
+        }
+        return result
 
     def check_remaining(self,
                         allowed_strings: List[str | Any],
