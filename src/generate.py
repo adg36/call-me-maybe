@@ -153,8 +153,7 @@ class Pipeline:
 
             while True:
                 allowed_strings = self.allowed_strings(
-                    state, function_name, prompt.prompt)
-                # print("Allowed strings: ", allowed_strings)
+                    state, function_name, current_string)
                 candidates = [
                     s for s in allowed_strings
                     if s.startswith(current_string)
@@ -183,29 +182,18 @@ class Pipeline:
                         current_string = ""
                         remaining = []
                         text = ""
-                elif (
-                        state == State.EXPECT_STRING
-                        and (current_string.endswith("',")
-                             or current_string.endswith('",'))
-                ):
-                    self.current_parameter += 1
-                    state = State.EXPECT_PARAM_KEY
-                    current_string = ""
-                    remaining = []
-                    text = ""
-                elif (
-                        state == State.EXPECT_STRING
-                        and current_string.endswith("}")
-                ):
-                    state = State.DONE
-                elif (
-                        state == State.EXPECT_STRING
-                        and current_string.endswith("\n")
-                ):
-                    state = State.FINISHED
-                    break
-                elif (len(candidates) == 1
-                        and current_string == candidates[0]):
+                elif state == State.EXPECT_STRING:
+                    if (current_string.endswith("',")
+                            or current_string.endswith('",')):
+                        self.current_parameter += 1
+                        state = State.EXPECT_PARAM_KEY
+                        current_string = ""
+                        remaining = []
+                        text = ""
+                    if current_string.endswith("\n"):
+                        state = State.FINISHED
+                        break
+                elif len(candidates) == 1 and current_string == candidates[0]:
                     if state == State.EXPECT_FUNCTION_NAME:
                         function_name = current_string[1:-1]
                     elif state == State.EXPECT_PARAM_KEY:
