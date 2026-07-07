@@ -24,7 +24,7 @@ class Pipeline:
     def allowed_strings(self,
                         state: State,
                         function_name: str | None,
-                        prompt: str
+                        current_string: str
                         ) -> List[str | Any]:
         if state == State.START:
             return ["{"]
@@ -59,12 +59,11 @@ class Pipeline:
                     "7", "8", "9", "}"
                 ]
         if state == State.EXPECT_STRING:
-            prompt_string = self.get_string_from_prompt(prompt)
-            if prompt_string:
-                return [prompt_string]
+            if current_string == "":
+                return ['"']
             return []
         if state == State.DONE:
-            return ['}']
+            return ["}"]
         if state == State.FINISHED:
             return []
         return []
@@ -84,13 +83,13 @@ class Pipeline:
                             and token_id not in allowed_token_ids):
                         allowed_token_ids.append(token_id)
             return allowed_token_ids
-
-        for suffix in remaining:
-            ids = self.model.encode(suffix)[0].tolist()
-            for token_id in ids:
-                if (suffix.startswith(self.model.decode(token_id))
-                        and token_id not in allowed_token_ids):
-                    allowed_token_ids.append(token_id)
+        else:
+            for suffix in remaining:
+                ids = self.model.encode(suffix)[0].tolist()
+                for token_id in ids:
+                    if (suffix.startswith(self.model.decode(token_id))
+                            and token_id not in allowed_token_ids):
+                        allowed_token_ids.append(token_id)
             return allowed_token_ids
 
     def sample_one_token(self,
@@ -117,27 +116,18 @@ class Pipeline:
                 return function.parameters
         return {}
 
-    def get_string_from_prompt(self, prompt: str) -> str:
-        s = ""
-        print(f"Getting string from prompt '{prompt}'")
-        index = prompt.find('\"')
-        print("Index: ", index)
-        if index >= 0:
-            index += 1
-            while prompt[index] != '\"':
-                s += prompt[index]
-                index += 1
-        return s
-
     def generate_function_call(self) -> None:
         output = []
 
-        for prompt in self.prompts[8:]:
+        for i, prompt in enumerate(self.prompts):
+
+            print(f"PROMPT {i+1}/{len(self.prompts)}: {prompt.prompt}")
 
             # 1. PROMPT
             my_prompt = f"""
-            Choose the most appropriate function from the list
-            and return ONLY a valid JSON object.
+            Choose the function whose description
+            best matches the user request.
+            Return only a JSON object.
 
             Functions:
             {self.functions}
@@ -164,6 +154,7 @@ class Pipeline:
             while True:
                 allowed_strings = self.allowed_strings(
                     state, function_name, prompt.prompt)
+                # print("Allowed strings: ", allowed_strings)
                 candidates = [
                     s for s in allowed_strings
                     if s.startswith(current_string)
@@ -172,7 +163,7 @@ class Pipeline:
                     allowed_strings, remaining)
                 if len(allowed_token_ids) == 1:
                     tokens.append(int(allowed_token_ids[0]))
-                    text = self.model.decode(allowed_token_ids[0])
+                    text = self.model.decode(allowed_token_ids)
                 else:
                     text = self.sample_one_token(allowed_token_ids, tokens)
                 current_string += text
@@ -192,18 +183,29 @@ class Pipeline:
                         current_string = ""
                         remaining = []
                         text = ""
-                elif state == State.EXPECT_STRING:
-                    if (current_string.endswith("',")
-                            or current_string.endswith('",')):
-                        self.current_parameter += 1
-                        state = State.EXPECT_PARAM_KEY
-                        current_string = ""
-                        remaining = []
-                        text = ""
-                    if current_string.endswith("\n"):
-                        state = State.FINISHED
-                        break
-                elif len(candidates) == 1 and current_string == candidates[0]:
+                elif (
+                        state == State.EXPECT_STRING
+                        and (current_string.endswith("',")
+                             or current_string.endswith('",'))
+                ):
+                    self.current_parameter += 1
+                    state = State.EXPECT_PARAM_KEY
+                    current_string = ""
+                    remaining = []
+                    text = ""
+                elif (
+                        state == State.EXPECT_STRING
+                        and current_string.endswith("}")
+                ):
+                    state = State.DONE
+                elif (
+                        state == State.EXPECT_STRING
+                        and current_string.endswith("\n")
+                ):
+                    state = State.FINISHED
+                    break
+                elif (len(candidates) == 1
+                        and current_string == candidates[0]):
                     if state == State.EXPECT_FUNCTION_NAME:
                         function_name = current_string[1:-1]
                     elif state == State.EXPECT_PARAM_KEY:
@@ -241,6 +243,7 @@ class Pipeline:
                     "parameters": obj["parameters"]
             }
             output.append(result)
+            print(f"ANSWER: {result}")
         self.write_output(output)
 
     def check_remaining(self,
