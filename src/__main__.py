@@ -6,6 +6,8 @@ constrained decoding pipeline to generate structured function calls.
 """
 
 import argparse
+import sys
+from exceptions import LoadingError
 from generate import Pipeline
 from loader import load_and_validate_functions, load_and_validate_prompts
 from llm_sdk import Small_LLM_Model  # type: ignore[attr-defined]
@@ -27,14 +29,18 @@ if __name__ == "__main__":
     pr_filepath = args.input
     output_filepath = args.output
 
-    validated_functions = load_and_validate_functions(fn_filepath)
-    validated_prompts = load_and_validate_prompts(pr_filepath)
+    try:
+        validated_functions = load_and_validate_functions(fn_filepath)
+        validated_prompts = load_and_validate_prompts(pr_filepath) 
 
-    model = Small_LLM_Model(device="cpu")
-    pipeline = Pipeline(
-            model,
-            validated_prompts,
-            validated_functions,
-            output_filepath
-    )
-    pipeline.generate_function_call()
+        model = Small_LLM_Model(device="cpu")
+        pipeline = Pipeline(
+                model,
+                validated_prompts,
+                validated_functions,
+                output_filepath
+        )
+        pipeline.generate_function_call()
+    except (RuntimeError, LoadingError) as e:
+        print(f"Error: {e}")
+        sys.exit(1)

@@ -1,7 +1,17 @@
+"""Generate constrained function calls using grammar-guided decoding.
+
+This module implements the decoding pipeline responsible for generating
+structured JSON function calls from natural language prompts.
+
+Generation is constrained by a finite-state machine that restricts the set of
+valid tokens at each decoding step, ensuring that the produced output conforms
+to the expected JSON schema. The pipeline coordinates prompt preparation,
+token filtering, state transitions, parameter extraction, and output
+serialization.
+"""
 from typing import Any, Dict, List
 import json
 import os
-import sys
 import numpy as np
 from llm_sdk import Small_LLM_Model  # type: ignore[attr-defined]
 from models import FunctionSchema, PromptSchema, Parameter
@@ -16,6 +26,7 @@ class Pipeline:
     finite-state machine transitions, and JSON output generation using
     the provided language model and function schemas.
     """
+
     def __init__(
         self,
         model: Small_LLM_Model,
@@ -223,12 +234,8 @@ class Pipeline:
 
             print(f"PROMPT {i+1}/{len(self.prompts)}: {prompt.prompt}")
 
-            try:
-                result = self.generate_one_prompt(prompt)
-                output.append(result)
-            except RuntimeError as e:
-                print(f"Error: {e}")
-                sys.exit(1)
+            result = self.generate_one_prompt(prompt)
+            output.append(result)
             print(f"ANSWER: {result}")
         self.write_output(output)
 
@@ -345,8 +352,8 @@ class Pipeline:
                         self.parameter_count = len(params)
                         if params:
                             current_param = list(
-                                    params.values()
-                                    )[self.current_parameter].type
+                                params.values()
+                            )[self.current_parameter].type
                             if current_param == "number":
                                 state = State.EXPECT_NUMBER_START
                             elif current_param == "integer":
@@ -371,9 +378,9 @@ class Pipeline:
         if "path" in obj["parameters"].keys():
             obj["parameters"]["path"] = obj["parameters"]["path"].lstrip()
         result = {
-                "prompt": prompt.prompt,
-                "name": obj["name"],
-                "parameters": obj["parameters"]
+            "prompt": prompt.prompt,
+            "name": obj["name"],
+            "parameters": obj["parameters"]
         }
         return result
 
