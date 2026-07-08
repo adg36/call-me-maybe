@@ -135,6 +135,8 @@ class Pipeline:
 
     def generate_one_prompt(self, prompt: PromptSchema) -> List[Any]:
 
+        generated_tokens = 0
+
         # 1. PROMPT
         my_prompt = f"""
         Choose the function whose description
@@ -177,7 +179,15 @@ class Pipeline:
                 text = self.model.decode(allowed_token_ids)
             else:
                 text = self.sample_one_token(allowed_token_ids, tokens)
+            generated_tokens += 1
+            if generated_tokens > 200:
+                raise RuntimeError("Generation exceeded maximum token limit.")
             current_string += text
+            if state in (State.EXPECT_NUMBER_START, State.EXPECT_NUMBER_CONT):
+                if len(current_string) > 20:
+                    raise RuntimeError("Failed to generate a valid function "
+                                       "call: numeric parameter exceeded "
+                                       "maximum length.")
             answer.append(text)
             if state == State.EXPECT_NUMBER_START:
                 if current_string.endswith("."):
@@ -237,6 +247,8 @@ class Pipeline:
                 remaining = self.check_remaining(
                     allowed_strings, current_string)
         obj = json.loads("".join(answer))
+        if "path" in obj["parameters"].keys():
+            obj["parameters"]["path"] = obj["parameters"]["path"].lstrip()
         result = {
                 "prompt": prompt.prompt,
                 "name": obj["name"],
