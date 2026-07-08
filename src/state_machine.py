@@ -1,17 +1,31 @@
-from enum import Enum
+"""Finite-state machine used during constrained decoding.
+
+The decoder progresses through these states while generating a valid
+JSON function call. State transitions enforce the expected output
+grammar throughout token generation.
+"""
+
+from enum import Enum, auto
 
 
 class State(Enum):
-    START = 1
-    EXPECT_NAME_KEY = 2
-    EXPECT_FUNCTION_NAME = 3
-    EXPECT_PARAMETERS_KEY = 4
-    EXPECT_PARAM_KEY = 5
-    EXPECT_NUMBER_START = 6
-    EXPECT_NUMBER_CONT = 7
-    EXPECT_STRING = 8
-    DONE = 9
-    FINISHED = 10
+    """Represent the decoder states during constrained generation."""
+
+    START = auto()
+    EXPECT_NAME_KEY = auto()
+    EXPECT_FUNCTION_NAME = auto()
+    EXPECT_PARAMETERS_KEY = auto()
+    EXPECT_PARAM_KEY = auto()
+    EXPECT_NUMBER_START = auto()
+    EXPECT_NUMBER_CONT = auto()
+    EXPECT_STRING = auto()
+    DONE = auto()
+    FINISHED = auto()
+
+#: Mapping of states with deterministic transitions.
+#:
+#: States that require additional runtime decisions (such as parameter
+#: types or parameter counts) are handled separately by the decoder.
 
 
 NEXT_STATE = {

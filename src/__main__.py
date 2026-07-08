@@ -1,3 +1,10 @@
+"""Entry point for the constrained function-calling pipeline.
+
+This module parses command-line arguments, loads and validates the input
+schemas and prompts, initializes the language model, and runs the
+constrained decoding pipeline to generate structured function calls.
+"""
+
 import argparse
 from generate import Pipeline
 from loader import load_and_validate_functions, load_and_validate_prompts

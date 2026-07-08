@@ -1,3 +1,11 @@
+"""Utilities for loading and validating project input files.
+
+This module provides helper functions to load the function definitions,
+prompt definitions, and tokenizer vocabulary from disk. JSON files are
+validated against the project's Pydantic schemas before being returned
+to the caller.
+"""
+
 import json
 import sys
 from typing import Any, List
@@ -7,7 +15,15 @@ from models import FunctionSchema, PromptSchema
 
 
 def load_and_validate_functions(fn_filepath: str) -> List[FunctionSchema]:
+    """Load and validate function definitions from a JSON file.
 
+    Read the function definition file, validate its contents against the
+    FunctionSchema model, and return the validated objects.
+
+    Raises:
+        LoadingError: If the file cannot be opened.
+        SystemExit: If the JSON content fails schema validation.
+    """
     fn_adapter = TypeAdapter(List[FunctionSchema])
 
     try:
@@ -32,7 +48,15 @@ def load_and_validate_functions(fn_filepath: str) -> List[FunctionSchema]:
 
 
 def load_and_validate_prompts(pr_filepath: str) -> list[PromptSchema]:
+    """Load and validate prompts from a JSON file.
 
+    Read the prompt file, validate its contents against the PromptSchema
+    model, and return the validated objects.
+
+    Raises:
+        LoadingError: If the file cannot be opened.
+        SystemExit: If the JSON content fails schema validation.
+    """
     pr_adapter = TypeAdapter(List[PromptSchema])
 
     try:
@@ -57,6 +81,14 @@ def load_and_validate_prompts(pr_filepath: str) -> list[PromptSchema]:
 
 
 def load_vocabulary(vocab_path: str) -> Any:
+    """Load the tokenizer vocabulary from a JSON file.
+
+    Read the vocabulary file, deserialize its JSON contents, and return
+    the resulting object.
+
+    Raises:
+        LoadingError: If the file cannot be opened.
+    """
     try:
         with open(vocab_path, "r") as f:
             raw_vocab = f.read()
@@ -68,5 +100,8 @@ def load_vocabulary(vocab_path: str) -> Any:
         raise LoadingError(
                 "Vocabulary file does not exist."
         ) from e
-    vocab = json.loads(raw_vocab)
+    try:
+        vocab = json.loads(raw_vocab)
+    except json.JSONDecodeError as e:
+        raise LoadingError("Vocabulary file contains invalid JSON.") from e
     return vocab
