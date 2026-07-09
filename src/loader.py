@@ -44,6 +44,10 @@ def load_and_validate_functions(fn_filepath: str) -> List[FunctionSchema]:
         print(f"Error: {e}")
         sys.exit(1)
 
+    if not validated_functions:
+        raise LoadingError(
+                "No functions were found in the functions definition file."
+        )
     return validated_functions
 
 
@@ -77,6 +81,15 @@ def load_and_validate_prompts(pr_filepath: str) -> list[PromptSchema]:
         print(f"Error: {e}")
         sys.exit(1)
 
+    if not validated_prompts:
+        raise LoadingError(
+                "No prompts were found in the functions calling tests file."
+        )
+    for i, prompt in enumerate(validated_prompts):
+        if not prompt.prompt.strip():
+            raise LoadingError(
+                    f"Prompt {i + 1} is empty."
+            )
     return validated_prompts
 
 

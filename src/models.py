@@ -4,7 +4,7 @@ These models are used to validate function definitions, prompts, and
 generated function calls loaded from or written to JSON files.
 """
 
-from typing import Any, Dict
+from typing import Any, Dict, Literal
 from pydantic import BaseModel
 
 
@@ -14,7 +14,7 @@ class Parameter(BaseModel):
     Stores the expected type of a function parameter as defined in the
     function schema.
     """
-    type: str
+    type: Literal["number", "integer", "string"]
 
 
 class FunctionSchema(BaseModel):

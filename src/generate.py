@@ -14,6 +14,7 @@ import json
 import os
 import numpy as np
 from llm_sdk import Small_LLM_Model  # type: ignore[attr-defined]
+from exceptions import LoadingError
 from models import FunctionSchema, PromptSchema, Parameter
 from state_machine import State, NEXT_STATE
 
@@ -313,9 +314,10 @@ class Pipeline:
             current_string += text
             if state in (State.EXPECT_NUMBER_START, State.EXPECT_NUMBER_CONT):
                 if len(current_string) > 20:
-                    raise RuntimeError("Failed to generate a valid function "
-                                       "call: numeric parameter exceeded "
-                                       "maximum length.")
+                    raise RuntimeError(
+                            "Failed to generate a valid function call: "
+                            "generation did not converge to a valid output."
+                    )
             answer.append(text)
             if state == State.EXPECT_NUMBER_START:
                 if current_string.endswith("."):
@@ -419,5 +421,14 @@ class Pipeline:
         """
         os.makedirs(os.path.dirname(self.output_filepath), exist_ok=True)
 
-        with open(self.output_filepath, "w") as f:
-            json.dump(output, f, indent=2)
+        try:
+            with open(self.output_filepath, "w") as f:
+                json.dump(output, f, indent=2)
+        except IsADirectoryError as e:
+            raise LoadingError(
+                    "Output path must be a file, not a directory."
+            ) from e
+        except PermissionError as e:
+            raise LoadingError("Cannot write to the output file.") from e
+        except OSError as e:
+            raise LoadingError(f"Could not write output: {e}") from e

@@ -6,6 +6,7 @@ constrained decoding pipeline to generate structured function calls.
 """
 
 import argparse
+import os
 import sys
 from exceptions import LoadingError
 from generate import Pipeline
@@ -25,9 +26,23 @@ if __name__ == "__main__":
                         default="data/output/function_calling_results.json")
     args = parser.parse_args()
 
+    if not args.functions_definition:
+        print("Invalid functions_definition path.")
+        sys.exit(1)
+    if not args.input:
+        print("Invalid input path.")
+        sys.exit(1)
+    if not args.output:
+        print("Invalid output path.")
+        sys.exit(1)
+
     fn_filepath = args.functions_definition
     pr_filepath = args.input
     output_filepath = args.output
+    
+    if os.path.isdir(output_filepath):
+        print("Error: Output path must be a file, not a directory.")
+        sys.exit(1)
 
     try:
         validated_functions = load_and_validate_functions(fn_filepath)
