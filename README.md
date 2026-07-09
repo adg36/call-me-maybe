@@ -4,16 +4,16 @@
 
 ## Description
 
-This project implements constrained decoding for function calling using a local Large Language Model (LLM).
+This project implements constrained decoding for function calling using a local Large Language Model (LLM) called Qwen/Qwen3-0.6B.
 
-Instead of allowing the model to freely generate arbitrary text, the decoder restricts every generated token so that the output always conforms to a predefined JSON schema describing a valid function call.
+Instead of allowing the model to freely generate arbitrary text, a decoder restricts every generated token so that the output always conforms to a predefined JSON schema describing a valid function call.
 
 The implementation combines:
-
-	- a finite-state machine (FSM) representing the JSON grammar;
-	- grammar-aware token filtering;
-	- incremental token-by-token generation;
-	- constrained decoding directly over the model's vocabulary.
+	
+    * A finite-state machine (FSM) representing the JSON grammar
+	* Grammar-aware token filtering
+	* Incremental token-by-token generation
+	* Constrained decoding directly over the model's vocabulary
 
 Rather than validating the output after generation, invalid continuations are eliminated before the model selects its next token.
 
@@ -41,6 +41,7 @@ src/
     generate.py          # decoding pipeline
     state_machine.py     # FSM states and transitions
     models.py            # Pydantic schemas
+    loader.py            # file loading and validation
 
 data/
     input/
